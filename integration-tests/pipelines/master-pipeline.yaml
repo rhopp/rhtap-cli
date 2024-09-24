@@ -1,0 +1,82 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: master-pipeline
+  namespace: pkumari-tenant
+  labels:
+    appstudio.openshift.io/component: rhtap-cli
+    appstudio.openshift.io/application: rhtap-cli-rhopp
+spec:
+  params:
+    - name: SNAPSHOT
+      description: 'The JSON string representing the snapshot of the application under test.'
+      default: '{"components": [{"name":"test-app", "containerImage": "quay.io/example/repo:latest"}]}'
+      type: string
+    - name: test-event-type
+      description: 'Indicates if the test is triggered by a Pull Request or Push event.'
+      default: 'none'
+      type: string
+    - name: konflux-test-infra-secret
+      description: The name of secret where testing infrastructures credentials are stored.
+      type: string
+  tasks:
+    - name: test-metadata
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/konflux-ci/konflux-qe-definitions.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: common/tasks/test-metadata/0.1/test-metadata.yaml
+      params:
+        - name: SNAPSHOT
+          value: $(params.SNAPSHOT)
+        - name: test-name
+          value: $(context.pipelineRun.name)
+    - name: start-nested-pipelines
+      when:
+        - input: "$(tasks.test-metadata.results.test-event-type)"
+          operator: in
+          values: ["pull_request"]
+      params:
+        - name: job-spec
+          value: "$(tasks.test-metadata.results.job-spec)"
+        - name: pull-request-author
+          value: "$(tasks.test-metadata.results.pull-request-author)"
+        - name: pull-request-number
+          value: "$(tasks.test-metadata.results.pull-request-number)"
+        - name: git-repo
+          value: "$(tasks.test-metadata.results.git-repo)"
+        - name: git-org
+          value: "$(tasks.test-metadata.results.git-org)"
+      runAfter:
+        - test-metadata
+      taskSpec:
+        steps:
+          - name: start-pipeline
+            image: quay.io/openshift-pipeline/ci
+            env: 
+              - name: SNAPSHOT
+                value: $(params.SNAPSHOT)
+            script: |
+              #!/usr/bin/env bash
+              set -x
+              ocp_versions=("4.14" "4.15")
+              # Start the created pipeline with different parameters
+              for ocp_version in "${ocp_versions[@]}"
+              do
+                tkn pipeline start --dry-run -f https://raw.githubusercontent.com/rhopp/rhtap-cli/integration-tests/pipelines/rhtap-cli-e2e.yaml \
+                  --param git-url="$(tasks.test-metadata.results.git-url)"\
+                  --param git-revision="$(tasks.test-metadata.results.git-revision)"\
+                  --param ocp-version="$ocp_version"\
+                  --param job-spec="$(tasks.test-metadata.results.job-spec)"\
+                  --param pull-request-author="$(tasks.test-metadata.results.pull-request-author)"\
+                  --param pull-request-number="$(tasks.test-metadata.results.pull-request-number)"\
+                  --param git-repo="$(tasks.test-metadata.results.git-repo)"\
+                  --param git-org="$(tasks.test-metadata.results.git-org)"\
+                #tkn pipeline start -f https://raw.githubusercontent.com/prietyc123-qe-org/slpsd8qa9-go/main/integration-tests/pipelines/echo-test-pipeline.yaml --param TEST="$word"
+              done
+
+              oc get pipelineruns
