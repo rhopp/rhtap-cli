@@ -78,7 +78,7 @@ spec:
                   --param git-repo="$(tasks.test-metadata.results.git-repo)"\
                   --param git-org="$(tasks.test-metadata.results.git-org)"\
                   --param git-revision="$(tasks.test-metadata.results.git-revision)" \
-                  --param konflux-test-infra-secret="$(params.konflux-test-infra-secret)"
+                  --param konflux-test-infra-secret="$(params.konflux-test-infra-secret)" \
                   --use-param-defaults \
                   --labels "appstudio.openshift.io/component=rhtap-cli" \
                   --labels "appstudio.openshift.io/application=rhtap-cli-rhopp" \
