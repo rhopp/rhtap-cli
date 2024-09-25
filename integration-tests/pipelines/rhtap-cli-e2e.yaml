@@ -228,4 +228,4 @@ spec:
         - name: git-org
           value: "$(params.git-org)"
         - name: git-revision
-          value: "$(tasks.test-metadata.results.git-revision)"
+          value: "$(params.git-revision)"
