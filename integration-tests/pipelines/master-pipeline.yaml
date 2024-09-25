@@ -67,7 +67,7 @@ spec:
               # Start the created pipeline with different parameters
               for ocp_version in "${ocp_versions[@]}"
               do
-                tkn pipeline start --dry-run -f https://raw.githubusercontent.com/rhopp/rhtap-cli/integration-tests/pipelines/rhtap-cli-e2e.yaml \
+                tkn pipeline start --dry-run -f https://raw.githubusercontent.com/rhopp/rhtap-cli/refs/heads/main/integration-tests/pipelines/rhtap-cli-e2e.yaml \
                   --param git-url="$(tasks.test-metadata.results.git-url)"\
                   --param git-revision="$(tasks.test-metadata.results.git-revision)"\
                   --param ocp-version="$ocp_version"\
