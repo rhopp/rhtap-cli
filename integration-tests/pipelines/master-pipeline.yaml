@@ -79,9 +79,12 @@ spec:
                   --param git-org="$(tasks.test-metadata.results.git-org)"\
                   --param git-revision="$(tasks.test-metadata.results.git-revision)" \
                   --use-param-defaults \
+                  --labels "appstudio.openshift.io/component=rhtap-cli" \
+                  --labels "appstudio.openshift.io/application=rhtap-cli-rhopp" \
+                  --prefix-name "e2e-$ocp_version"\
                   -o name)
                   
-                  tkn pipelinerun wait  "$pipeline_run_name"
+                  tkn pipelinerun logs  "$pipeline_run_name" -f
                 ) &
                 #tkn pipeline start -f https://raw.githubusercontent.com/prietyc123-qe-org/slpsd8qa9-go/main/integration-tests/pipelines/echo-test-pipeline.yaml --param TEST="$word"
               done
