@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
   name: master-pipeline
-  namespace: pkumari-tenant
+  namespace: rhopp-tenant
   labels:
     appstudio.openshift.io/component: rhtap-cli
     appstudio.openshift.io/application: rhtap-cli-rhopp
