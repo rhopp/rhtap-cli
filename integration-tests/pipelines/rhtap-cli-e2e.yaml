@@ -51,6 +51,9 @@ spec:
       type: string
     - name: git-org
       type: string
+    - name: konflux-test-infra-secret
+      description: The name of secret where testing infrastructures credentials are stored.
+      type: string
   tasks:
     - name: rosa-hcp-metadata
       taskRef:
