@@ -67,7 +67,8 @@ spec:
               # Start the created pipeline with different parameters
               for ocp_version in "${ocp_versions[@]}"
               do
-                tkn pipeline start --dry-run -f https://raw.githubusercontent.com/rhopp/rhtap-cli/refs/heads/main/integration-tests/pipelines/rhtap-cli-e2e.yaml \
+                (
+                pipeline_run_name=$(tkn pipeline start --dry-run -f https://raw.githubusercontent.com/rhopp/rhtap-cli/refs/heads/main/integration-tests/pipelines/rhtap-cli-e2e.yaml \
                   --param git-url="$(tasks.test-metadata.results.git-url)"\
                   --param git-revision="$(tasks.test-metadata.results.git-revision)"\
                   --param ocp-version="$ocp_version"\
@@ -76,8 +77,13 @@ spec:
                   --param pull-request-number="$(tasks.test-metadata.results.pull-request-number)"\
                   --param git-repo="$(tasks.test-metadata.results.git-repo)"\
                   --param git-org="$(tasks.test-metadata.results.git-org)"\
-                  --use-param-defaults
+                  --use-param-defaults \
+                  -o name)
+                  
+                  tkn pipelinerun wait  "$pipeline_run_name"
+                ) &
                 #tkn pipeline start -f https://raw.githubusercontent.com/prietyc123-qe-org/slpsd8qa9-go/main/integration-tests/pipelines/echo-test-pipeline.yaml --param TEST="$word"
               done
+              wait
 
               oc get pipelineruns
