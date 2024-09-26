@@ -60,13 +60,14 @@ spec:
             env: 
               - name: SNAPSHOT
                 value: $(params.SNAPSHOT)
+              - name: JOB_SPEC
+                value: $(tasks.test-metadata.results.job-spec)
             script: |
               #!/usr/bin/env bash
               set -x
               echo $(tasks.test-metadata.results.job-spec)
               echo "$(tasks.test-metadata.results.job-spec)"
-              echo $(params.job-spec)
-              echo "$(params.job-spec)"
+              echo "$JOB_SPEC"
 
               ocp_versions=("4.14" "4.15")
               # Start the created pipeline with different parameters
