@@ -82,7 +82,7 @@ spec:
                   --use-param-defaults \
                   --labels "appstudio.openshift.io/component=rhtap-cli" \
                   --labels "appstudio.openshift.io/application=rhtap-cli-rhopp" \
-                  --labels "pipelines.appstudio.openshift.io/type: $(context.pipeline.name)" \
+                  --labels "pipelines.appstudio.openshift.io/type=$(context.pipeline.name)" \
                   --prefix-name "e2e-$ocp_version"\
                   -o name)
                   
