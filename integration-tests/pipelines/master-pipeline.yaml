@@ -92,9 +92,8 @@ spec:
                   --prefix-name "e2e-$ocp_version"\
                   -o name)
                   
-                  tkn pipelinerun logs  "$pipeline_run_name" -f
+                  tkn pipelinerun logs  "$pipeline_run_name" -f | sed 's/^/$pipeline_run_name: /'
                 ) &
-                #tkn pipeline start -f https://raw.githubusercontent.com/prietyc123-qe-org/slpsd8qa9-go/main/integration-tests/pipelines/echo-test-pipeline.yaml --param TEST="$word"
               done
               wait
 
