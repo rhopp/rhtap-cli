@@ -106,7 +106,7 @@ spec:
                 pipeline_run_name=$(tkn pipeline start -f https://raw.githubusercontent.com/rhopp/rhtap-cli/refs/heads/rhopp-patch-1/integration-tests/pipelines/rhtap-cli-e2e.yaml \
                   --param git-url="$(tasks.test-metadata.results.git-url)"\
                   --param git-revision="$(tasks.test-metadata.results.git-revision)"\
-                  --param ocp-version="$ocp_version"\
+                  --param ocp-version="$version"\
                   --param job-spec="$JOB_SPEC"\
                   --param pull-request-author="$(tasks.test-metadata.results.pull-request-author)"\
                   --param pull-request-number="$(tasks.test-metadata.results.pull-request-number)"\
@@ -119,7 +119,7 @@ spec:
                   --labels "appstudio.openshift.io/application=rhtap-cli-rhopp" \
                   --labels "pipelines.appstudio.openshift.io/type=$(context.pipelineRun.name)" \
                   --labels "test.appstudio.openshift.io/scenario=multi-level-test" \
-                  --prefix-name "e2e-$ocp_version"\
+                  --prefix-name "e2e-$version"\
                   -o name)
                   
                   tkn pipelinerun logs  "$pipeline_run_name" -f | sed "s/^/$pipeline_run_name: /"
