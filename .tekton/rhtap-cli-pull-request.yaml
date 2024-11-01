@@ -23,11 +23,11 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/rhopp-tenant/rhtap-cli-rhopp/rhtap-cli:on-pr-{{revision}}
+    value: quay.io/redhat-user-workloads/rhopp-tenant/rhtap-cli:on-pr-{{revision}}
   - name: image-expires-after
     value: 5d
   - name: dockerfile
-    value: Dockerfile
+    value: ./Dockerfile
   pipelineSpec:
     description: |
       This pipeline is ideal for building container images from a Containerfile while maintaining trust after pipeline customization.
