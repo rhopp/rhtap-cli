@@ -14,14 +14,6 @@ spec:
       description: 'The name of the test corresponding to a defined Konflux integration test.'
       default: ''
       type: string
-    - name: git-url
-      type: string
-      description: "Git url of rhtap-cli repo used by rhtap-install build the CLI"
-      # default: "https://github.com/redhat-appstudio/rhtap-cli.git" 
-    - name: git-revision
-      type: string
-      description: "Revision for rhtap-cli repo used by rhtap-install task"
-      default: "main"
     - name: ocp-version
       description: 'The OpenShift version to use for the ephemeral cluster deployment.'   
       type: string
@@ -200,13 +192,5 @@ spec:
           value: "$(tasks.create-oci-container.results.oci-container)"
         - name: pipeline-aggregate-status
           value: "$(tasks.status)"
-        - name: pull-request-author
-          value: "$(params.pull-request-author)"
-        - name: pull-request-number
-          value: "$(params.pull-request-number)"
-        - name: git-repo
-          value: "$(params.git-repo)"
-        - name: git-org
-          value: "$(params.git-org)"
-        - name: git-revision
-          value: "$(params.git-revision)"
+        - name: job-spec
+          value: "$(params.job-spec)"
