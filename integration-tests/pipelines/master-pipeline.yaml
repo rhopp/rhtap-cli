@@ -80,6 +80,7 @@ spec:
               set -x
               echo "Running tests for OCP versions:"
               echo "$CONFIGS_JSON" | jq -r '.[][] | select(.key == "OCP").value'
+              failed_pipelines=0
 
               while IFS= read -r version; do
                 (
@@ -96,8 +97,19 @@ spec:
                   -o name)
                   
                   tkn pipelinerun logs  "$pipeline_run_name" -f | sed "s/^/$pipeline_run_name: /"
+
+                  pipelinerun_status=$(tkn pipelinerun describe "$pipeline_run_name" -o jsonpath='{.status.conditions[0].status}')
+                  if [ "$pipelinerun_status" != "True" ]; then
+                    echo "Pipelinerun $pipeline_run_name failed"
+                    failed_pipelines=$((failed_pipelines + 1))
+                  fi
+
                 ) &
               done < <(echo "$CONFIGS_JSON" | jq -r '.[][] | select(.key == "OCP").value')
               wait
+              if [ $failed_pipelines -gt 0 ]; then
+                echo "One or more pipelineruns failed. Exiting with non-zero code."
+                oc get pipelineruns
+                exit 1
+              fi
 
-              oc get pipelineruns
