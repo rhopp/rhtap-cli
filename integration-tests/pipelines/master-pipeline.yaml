@@ -91,7 +91,7 @@ spec:
                   --labels "appstudio.openshift.io/component=rhtap-cli" \
                   --labels "appstudio.openshift.io/application=rhtap-cli-rhopp" \
                   --labels "pipelines.appstudio.openshift.io/type=$(context.pipelineRun.name)" \
-                  --labels "test.appstudio.openshift.io/scenario=multi-level-test" \
+                  --labels "test.appstudio.openshift.io/scenario=multi-level" \
                   --prefix-name "e2e-$version"\
                   -o name)
                   
