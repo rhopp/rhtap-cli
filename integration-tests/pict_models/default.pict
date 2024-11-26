@@ -1,4 +1,4 @@
-OCP: v4.17, v4.16
+OCP: 4.17, 4.16
 ACS: Enabled(deploy new)
 Registry: Quay(deploy new)
 TPA: Enabled

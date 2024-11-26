@@ -1,4 +1,4 @@
-OCP: v4.17, v4.16
+OCP: 4.17, 4.16
 ACS: Enabled(hosted), Enabled(deploy new)
 Registry: Quay(hosted), Quay(deploy new), Artifactory
 TPA: Enabled, Disabled
