@@ -89,34 +89,34 @@ spec:
               echo "$CONFIGS_JSON" | jq -r '.[][] | select(.key == "OCP").value'
               failed_pipelines=0
 
-              # while IFS= read -r version; do
-              #   (
-              #   pipeline_run_name=$(tkn pipeline start -f https://raw.githubusercontent.com/rhopp/rhtap-cli/refs/heads/RHTAP-2558v2/integration-tests/pipelines/rhtap-cli-e2e.yaml \
-              #     --param ocp-version="$version"\
-              #     --param job-spec="$JOB_SPEC"\
-              #     --param konflux-test-infra-secret="$(params.konflux-test-infra-secret)" \
-              #     --use-param-defaults \
-              #     --labels "appstudio.openshift.io/component=rhtap-cli" \
-              #     --labels "appstudio.openshift.io/application=rhtap-cli-rhopp" \
-              #     --labels "pipelines.appstudio.openshift.io/type=$(context.pipelineRun.name)" \
-              #     --labels "test.appstudio.openshift.io/scenario=multi-level" \
-              #     --prefix-name "e2e-$version"\
-              #     -o name)
+              while IFS= read -r version; do
+                (
+                pipeline_run_name=$(tkn pipeline start -f https://raw.githubusercontent.com/rhopp/rhtap-cli/refs/heads/RHTAP-2558v2/integration-tests/pipelines/rhtap-cli-e2e.yaml \
+                  --param ocp-version="$version"\
+                  --param job-spec="$JOB_SPEC"\
+                  --param konflux-test-infra-secret="$(params.konflux-test-infra-secret)" \
+                  --use-param-defaults \
+                  --labels "appstudio.openshift.io/component=rhtap-cli" \
+                  --labels "appstudio.openshift.io/application=rhtap-cli-rhopp" \
+                  --labels "pipelines.appstudio.openshift.io/type=$(context.pipelineRun.name)" \
+                  --labels "test.appstudio.openshift.io/scenario=multi-level" \
+                  --prefix-name "e2e-$version"\
+                  -o name)
                   
-              #     tkn pipelinerun logs  "$pipeline_run_name" -f | sed "s/^/$pipeline_run_name: /"
+                  tkn pipelinerun logs  "$pipeline_run_name" -f | sed "s/^/$pipeline_run_name: /"
 
-              #     pipelinerun_status=$(tkn pipelinerun describe "$pipeline_run_name" -o jsonpath='{.status.conditions[0].status}')
-              #     if [ "$pipelinerun_status" != "True" ]; then
-              #       echo "Pipelinerun $pipeline_run_name failed"
-              #       failed_pipelines=$((failed_pipelines + 1))
-              #     fi
+                  pipelinerun_status=$(tkn pipelinerun describe "$pipeline_run_name" -o jsonpath='{.status.conditions[0].status}')
+                  if [ "$pipelinerun_status" != "True" ]; then
+                    echo "Pipelinerun $pipeline_run_name failed"
+                    failed_pipelines=$((failed_pipelines + 1))
+                  fi
 
-              #   ) &
-              # done < <(echo "$CONFIGS_JSON" | jq -r '.[][] | select(.key == "OCP").value')
-              # wait
-              # if [ $failed_pipelines -gt 0 ]; then
-              #   echo "One or more pipelineruns failed. Exiting with non-zero code."
-              #   oc get pipelineruns
-              #   exit 1
-              # fi
+                ) &
+              done < <(echo "$CONFIGS_JSON" | jq -r '.[][] | select(.key == "OCP").value')
+              wait
+              if [ $failed_pipelines -gt 0 ]; then
+                echo "One or more pipelineruns failed. Exiting with non-zero code."
+                oc get pipelineruns
+                exit 1
+              fi
 
