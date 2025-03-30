@@ -594,7 +594,7 @@ google.golang.org/protobuf/types/gofeaturespb
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/timestamppb
-# gopkg.in/evanphx/json-patch.v5 v5.9.0
+# gopkg.in/evanphx/json-patch.v5 v5.9.11
 ## explicit
 gopkg.in/evanphx/json-patch.v5
 # gopkg.in/inf.v0 v0.9.1
