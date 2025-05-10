@@ -486,7 +486,8 @@ spec:
       optional: true
     - name: netrc
       optional: true
-  taskRunTemplate: {}
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-rhtap-cli
   workspaces:
   - name: workspace
     volumeClaimTemplate:
