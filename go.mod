@@ -7,7 +7,7 @@ toolchain go1.21.11
 require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/google/go-github/scrape v0.0.0-20240710201133-173aa01e10b0
-	github.com/google/go-github/v61 v61.0.0
+	github.com/google/go-github/v73 v73.0.0
 	github.com/onsi/gomega v1.32.0
 	github.com/openshift/api v0.0.0-20240321180530-e2137ad2cefd
 	github.com/openshift/client-go v0.0.0-20240312121557-60dd5f9fbf8d
