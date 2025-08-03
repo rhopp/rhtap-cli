@@ -1,8 +1,8 @@
 module github.com/redhat-appstudio/rhtap-cli
 
-go 1.21.0
+go 1.23
 
-toolchain go1.21.11
+toolchain go1.24.4
 
 require (
 	github.com/Masterminds/sprig/v3 v3.2.3
@@ -150,7 +150,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340 // indirect
 	k8s.io/utils v0.0.0-20240310230437-4693a0247e57 // indirect
 	oras.land/oras-go v1.2.5 // indirect
-	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
+	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.16.0 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.16.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
