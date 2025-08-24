@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	jsonpatch "gopkg.in/evanphx/json-patch.v5"
+	jsonpatch "gopkg.in/evanphx/json-patch.v4"
 	"sigs.k8s.io/kustomize/api/filters/patchjson6902"
 	"sigs.k8s.io/kustomize/api/resmap"
 	"sigs.k8s.io/kustomize/api/resource"
@@ -56,8 +56,9 @@ func (p *PatchTransformerPlugin) Config(h *resmap.PluginHelpers, c []byte) error
 	patchesSM, errSM := h.ResmapFactory().RF().SliceFromBytes([]byte(p.patchText))
 	patchesJson, errJson := jsonPatchFromBytes([]byte(p.patchText))
 
-	if (errSM == nil && errJson == nil) ||
-		(patchesSM != nil && patchesJson != nil) {
+	if ((errSM == nil && errJson == nil) ||
+		(patchesSM != nil && patchesJson != nil)) &&
+		(len(patchesSM) > 0 && len(patchesJson) > 0) {
 		return fmt.Errorf(
 			"illegally qualifies as both an SM and JSON patch: %s",
 			p.patchSource)
