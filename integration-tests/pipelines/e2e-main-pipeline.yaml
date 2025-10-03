@@ -5,27 +5,20 @@ metadata:
   name: e2e-main-pipeline
   namespace: rhtap-shared-team-tenant
   labels:
-    appstudio.openshift.io/component: tssc-cli
-    appstudio.openshift.io/application: tssc-cli
+    appstudio.openshift.io/component: rhtap-cli
+    appstudio.openshift.io/application: rhtap-cli
 spec:
   params:
     - name: SNAPSHOT
-      description: "The JSON string representing the snapshot of the application under test."
+      description: 'The JSON string representing the snapshot of the application under test.'
       default: '{"components": [{"name":"test-app", "containerImage": "quay.io/example/repo:latest"}]}'
       type: string
     - name: konflux-test-infra-secret
       description: The name of secret where testing infrastructures credentials are stored.
       type: string
-    - name: cloud-credential-key
-      description: The key secret from konflux-test-infra-secret where all AWS ROSA configurations are stored.
-      type: string
-    - name: ocp-instance-type
-      description: 'The type of machine to use for the cluster nodes.'
-      default: "m5.2xlarge"
-      type: string
-    - name: ocp-replicas
-      description: 'The number of replicas for the cluster nodes.'
-      default: "3"
+    - name: PICT_FILE_PATH
+      description: Path to pict file - non default paths are used for periodic jobs.
+      default: 'integration-tests/pict-models/default.pict'
       type: string
   tasks:
     - name: test-metadata
@@ -33,30 +26,76 @@ spec:
         resolver: git
         params:
           - name: url
-            value: https://github.com/konflux-ci/tekton-integration-catalog.git
+            value: https://github.com/konflux-ci/konflux-qe-definitions.git
           - name: revision
             value: main
           - name: pathInRepo
-            value: tasks/test-metadata/0.2/test-metadata.yaml
+            value: common/tasks/test-metadata/0.2/test-metadata.yaml
       params:
         - name: SNAPSHOT
           value: $(params.SNAPSHOT)
         - name: test-name
           value: $(context.pipelineRun.name)
-    - name: process-rhads-config
-      taskRef:
-        resolver: git
-        params:
-          - name: url
-            value: https://github.com/redhat-appstudio/tssc-cli.git
-          - name: revision
-            value: main
-          - name: pathInRepo
-            value: integration-tests/tasks/get-rhads-config.yaml
+    - name: get-pict-file
+      runAfter:
+        - test-metadata
+      taskSpec:
+        results:
+          - name: pict-file
+            description: pict file to be used in next step
+        steps:
+          - name: download
+            image: quay.io/konflux-ci/appstudio-utils:ab6b0b8e40e440158e7288c73aff1cf83a2cc8a9@sha256:24179f0efd06c65d16868c2d7eb82573cce8e43533de6cea14fec3b7446e0b14
+            env:
+              - name: JOB_SPEC
+                value: $(tasks.test-metadata.results.job-spec)
+              - name: PICT_FILE_LOCATION
+                value: $(params.PICT_FILE_PATH)
+            script: |
+              #!/usr/bin/env bash
+              set -x
+              echo "Using pict file on path:"
+              echo $PICT_FILE_LOCATION
+              ## Download the pict file from the repository under directory integration-tests/pict-models/default.pict
+              GIT_REPO="$(jq -r '.git.repo // empty' <<< $JOB_SPEC)"
+              REPO_ORG=$(jq -r '.git.source_repo_org' <<< $JOB_SPEC)
+              BRANCH=$(jq -r '.git.source_repo_branch' <<< $JOB_SPEC)
+
+              curl -o pict.txt https://raw.githubusercontent.com/$REPO_ORG/$GIT_REPO/refs/heads/$BRANCH/$PICT_FILE_LOCATION
+              ##Workaround: Base64 encode the pict file to avoid issues with removing double quotes
+              base64 -w 0 < pict.txt > $(results.pict-file.path)
+    - name: generate-configs
+      runAfter:
+        - get-pict-file
+      taskSpec:
+        results:
+          - name: configs-json
+            description: Config json generated from pict file.
+        steps:
+          - name: pict-generate
+            image: quay.io/apodhrad/pict:latest
+            env:
+              - name: PICT_FILE
+                value: $(tasks.get-pict-file.results.pict-file)
+              - name: PICT_FILE_LOCATION
+                value: $(params.PICT_FILE_PATH)
+            script: |
+              #!/usr/bin/env bash
+              set -x
+              base64 -d <<< "$(tasks.get-pict-file.results.pict-file)" > main.pict
+              cat main.pict
+              if [[ $PICT_FILE_LOCATION  =~ "periodic" ]]; then
+                ## Generate pict file for periodic job
+                ## (This parameter parameter: -o:1 ensures only 4 configs are generated(by default it is 2 - so it generates more configs, but we are changing this also for pr checks to 1, so it will generate 4 configs)
+                pict ./main.pict -r -o:1 -f:json > $(results.configs-json.path)
+              else
+                ## Use pict file for PR checks
+                pict ./main.pict -o:1 -f:json > $(results.configs-json.path)
+              fi
+    - name: start-nested-pipelines
       params:
         - name: job-spec
-          value: $(tasks.test-metadata.results.job-spec)
-    - name: start-nested-pipelines
+          value: "$(tasks.test-metadata.results.job-spec)"
       runAfter:
         - test-metadata
         - generate-configs
