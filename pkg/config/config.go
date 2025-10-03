@@ -1,14 +1,20 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
-	"log/slog"
 
-	"github.com/redhat-appstudio/rhtap-cli/pkg/chartfs"
+	"github.com/redhat-appstudio/tssc-cli/pkg/chartfs"
 
 	"gopkg.in/yaml.v3"
 )
+
+// Settings represents a map of configuration settings.
+type Settings map[string]interface{}
+
+// ProductSpec represents a map of product name and specification.
+type Products []Product
 
 // Spec contains all configuration sections.
 type Spec struct {
@@ -17,19 +23,16 @@ type Spec struct {
 	// different namespace.
 	Namespace string `yaml:"namespace"`
 	// Settings contains the configuration for the installer settings.
-	Settings map[string]interface{} `yaml:"settings"`
+	Settings Settings `yaml:"settings"`
 	// Products contains the configuration for the installer products.
-	Products map[string]ProductSpec `yaml:"products"`
-	// Dependencies contains the installer Helm chart dependencies.
-	Dependencies []Dependency `yaml:"dependencies"`
+	Products Products `yaml:"products"`
 }
 
 // Config root configuration structure.
 type Config struct {
-	cfs     *chartfs.ChartFS // embedded filesystem
-	payload []byte           // original configuration payload
-
-	Installer Spec `yaml:"tssc"` // root configuration for the installer
+	cfs       *chartfs.ChartFS // embedded filesystem
+	Installer Spec             `yaml:"tssc"` // root configuration for the installer
+	root      yaml.Node        // yaml data representation
 }
 
 var (
@@ -44,39 +47,25 @@ var (
 // DefaultRelativeConfigPath default relative path to YAML configuration file.
 var DefaultRelativeConfigPath = fmt.Sprintf("installer/%s", Filename)
 
-// GetDependency returns a dependency chart configuration.
-func (c *Config) GetDependency(logger *slog.Logger, chart string) (*Dependency, error) {
-	logger.Debug("Getting dependency")
-	for _, dep := range c.Installer.Dependencies {
-		if dep.Chart == chart {
-			return &dep, nil
+// GetProduct returns a product by name, or an error if the product is not found.
+func (c *Config) GetProduct(name string) (*Product, error) {
+	for i := range c.Installer.Products {
+		if c.Installer.Products[i].Name == name {
+			return &c.Installer.Products[i], nil
 		}
 	}
-	return nil, fmt.Errorf("chart '%s' not found", chart)
+	return nil, fmt.Errorf("product '%s' not found", name)
 }
 
-// GetEnabledDependencies returns a list of enabled dependencies.
-func (c *Config) GetEnabledDependencies(logger *slog.Logger) []Dependency {
-	enabled := []Dependency{}
-	logger.Debug("Getting enabled dependencies")
-	for _, dep := range c.Installer.Dependencies {
-		if dep.Enabled {
-			logger.Debug("Using dependency...", "dep-chart", dep.Chart)
-			enabled = append(enabled, dep)
-		} else {
-			logger.Debug("Skipping dependency...", "dep-chart", dep.Chart)
+// GetEnabledProducts returns a map of enabled products.
+func (c *Config) GetEnabledProducts() Products {
+	enabled := Products{}
+	for _, product := range c.Installer.Products {
+		if product.Enabled {
+			enabled = append(enabled, product)
 		}
 	}
 	return enabled
-}
-
-// GetProduct returns a product by name, or an error if the product is not found.
-func (c *Config) GetProduct(name string) (*ProductSpec, error) {
-	product, ok := c.Installer.Products[name]
-	if !ok {
-		return nil, fmt.Errorf("product '%s' not found", name)
-	}
-	return &product, nil
 }
 
 // Validate validates the configuration, checking for missing fields.
@@ -87,43 +76,71 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("%w: missing namespace", ErrInvalidConfig)
 	}
 
+	// The installer must have a settings section.
+	if root.Settings == nil {
+		return fmt.Errorf("%w: missing settings", ErrInvalidConfig)
+	}
+
 	// Validating the products, making sure every product entry is valid.
 	for _, product := range root.Products {
 		if err := product.Validate(); err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
-	// Making sure the installer has a list of dependencies.
-	if len(root.Dependencies) == 0 {
-		return fmt.Errorf("%w: missing dependencies", ErrInvalidConfig)
+// DecodeNode returns a struct converted from *yaml.Node
+func (c *Config) DecodeNode() error {
+	if len(c.root.Content) == 0 {
+		return fmt.Errorf("invalid configuration: content is empty")
 	}
-	// Validating each dependency, making sure they have the required fields.
-	for pos, dep := range root.Dependencies {
-		if dep.Chart == "" {
-			return fmt.Errorf(
-				"%w: missing chart in dependency %d", ErrInvalidConfig, pos)
+	doc := c.root.Content[0]
+	if doc.Kind != yaml.MappingNode || len(doc.Content) < 2 {
+		return fmt.Errorf("invalid configuration: root must be a mapping")
+	}
+	var tsscNode *yaml.Node
+	for i := 0; i+1 < len(doc.Content); i += 2 {
+		if doc.Content[i].Value == "tssc" {
+			tsscNode = doc.Content[i+1]
+			break
 		}
-		if dep.Namespace == "" {
-			return fmt.Errorf(
-				"%w: missing namespace in dependency %d", ErrInvalidConfig, pos)
-		}
+	}
+	if tsscNode == nil {
+		return fmt.Errorf("invalid configuration: missing 'tssc' key")
+	}
+	if err := tsscNode.Decode(&c.Installer); err != nil {
+		return err
 	}
 	return nil
 }
 
 // MarshalYAML marshals the Config into a YAML byte array.
 func (c *Config) MarshalYAML() ([]byte, error) {
-	return yaml.Marshal(c)
+	var buf bytes.Buffer
+	if len(c.root.Content) == 0 {
+		return nil, fmt.Errorf("invalid configuration format: content is nil or empty")
+	}
+	buf.WriteString("---\n")
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	defer encoder.Close()
+	if err := encoder.Encode(c.root.Content[0]); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // UnmarshalYAML Un-marshals the YAML payload into the Config struct, checking the
 // validity of the configuration.
-func (c *Config) UnmarshalYAML() error {
-	if len(c.payload) == 0 {
+func (c *Config) UnmarshalYAML(payload []byte) error {
+	if len(payload) == 0 {
 		return ErrEmptyConfig
 	}
-	if err := yaml.Unmarshal(c.payload, c); err != nil {
+	if err := yaml.Unmarshal(payload, &c.root); err != nil {
+		return fmt.Errorf("%w: %w", ErrUnmarshalConfig, err)
+	}
+	if err := c.DecodeNode(); err != nil {
 		return fmt.Errorf("%w: %w", ErrUnmarshalConfig, err)
 	}
 	return c.Validate()
@@ -131,18 +148,22 @@ func (c *Config) UnmarshalYAML() error {
 
 // String returns this configuration as string, indented with two spaces.
 func (c *Config) String() string {
-	return string(c.payload)
+	data, err := c.MarshalYAML()
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
 }
 
 // NewConfigFromFile returns a new Config instance based on the informed file.
 func NewConfigFromFile(cfs *chartfs.ChartFS, configPath string) (*Config, error) {
 	c := &Config{cfs: cfs}
 	var err error
-	c.payload, err = c.cfs.ReadFile(configPath)
+	payload, err := c.cfs.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
-	if err = c.UnmarshalYAML(); err != nil {
+	if err = c.UnmarshalYAML(payload); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -150,9 +171,19 @@ func NewConfigFromFile(cfs *chartfs.ChartFS, configPath string) (*Config, error)
 
 // NewConfigFromBytes instantiates a new Config from the bytes payload informed.
 func NewConfigFromBytes(payload []byte) (*Config, error) {
-	c := &Config{payload: payload}
-	if err := yaml.Unmarshal(payload, c); err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrUnmarshalConfig, err)
+	c := &Config{}
+	if err := c.UnmarshalYAML(payload); err != nil {
+		return nil, err
 	}
 	return c, nil
+}
+
+// NewConfigDefault returns a new Config instance with default values, i.e. the
+// configuration payload is loading embedded data.
+func NewConfigDefault() (*Config, error) {
+	cfs, err := chartfs.NewChartFSForCWD()
+	if err != nil {
+		return nil, err
+	}
+	return NewConfigFromFile(cfs, DefaultRelativeConfigPath)
 }

@@ -1,15 +1,20 @@
 package subcmd
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
-	"os"
+	"strings"
 
-	"github.com/redhat-appstudio/rhtap-cli/pkg/chartfs"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/config"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/flags"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/installer"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/k8s"
+	"github.com/redhat-appstudio/tssc-cli/pkg/chartfs"
+	"github.com/redhat-appstudio/tssc-cli/pkg/config"
+	"github.com/redhat-appstudio/tssc-cli/pkg/constants"
+	"github.com/redhat-appstudio/tssc-cli/pkg/flags"
+	"github.com/redhat-appstudio/tssc-cli/pkg/installer"
+	"github.com/redhat-appstudio/tssc-cli/pkg/integrations"
+	"github.com/redhat-appstudio/tssc-cli/pkg/k8s"
+	"github.com/redhat-appstudio/tssc-cli/pkg/printer"
+	"github.com/redhat-appstudio/tssc-cli/pkg/resolver"
 
 	"github.com/spf13/cobra"
 )
@@ -23,16 +28,21 @@ type Deploy struct {
 	cfs    *chartfs.ChartFS // embedded filesystem
 	kube   *k8s.Kube        // kubernetes client
 
-	chartPath          string // path of the chart when deploying a single chart
-	valuesTemplatePath string // path to the values template file
+	topologyBuilder    *resolver.TopologyBuilder // topology builder
+	chartPath          string                    // single chart path
+	valuesTemplatePath string                    // values template file path
 }
 
 var _ Interface = &Deploy{}
 
 const deployDesc = `
-Deploys the TSSC platform components. The installer looks the the informed
-configuration to identify the products to be installed, and the dependencies to be
-resolved.
+Deploys the TSSC platform components.
+
+It should only be used to for experimental deployments. Production
+deployments are not supported.
+
+The installer looks at the configuration to identify the products to be
+installed, and the dependencies to be resolved.
 
 The deployment configuration file describes the sequence of Helm charts to be
 applied, on the attribute 'tssc.dependencies[]'.
@@ -41,8 +51,7 @@ The platform configuration is rendered from the values template file
 (--values-template), this configuration payload is given to all Helm charts.
 
 The installer resources are embedded in the executable, these resources are
-employed by default, to use local files just point the "config.yaml" file to
-find the dependencies in the local filesystem.
+employed by default.
 
 A single chart can be deployed by specifying its path. E.g.:
 	tssc deploy charts/tssc-openshift
@@ -55,13 +64,21 @@ func (d *Deploy) Cmd() *cobra.Command {
 
 // log logger with contextual information.
 func (d *Deploy) log() *slog.Logger {
-	return d.flags.LoggerWith(
-		d.logger.With(flags.ValuesTemplateFlag, d.valuesTemplatePath))
+	return d.flags.LoggerWith(d.logger.With(
+		"chart-path", d.chartPath,
+		flags.ValuesTemplateFlag, d.valuesTemplatePath,
+	))
 }
 
 // Complete verifies the object is complete.
 func (d *Deploy) Complete(args []string) error {
 	var err error
+	d.topologyBuilder, err = resolver.NewTopologyBuilder(
+		d.logger, d.cfs, integrations.NewManager(d.logger, d.kube))
+	if err != nil {
+		return err
+	}
+	// Load the installer configuration from the cluster.
 	if d.cfg, err = bootstrapConfig(d.cmd.Context(), d.kube); err != nil {
 		return err
 	}
@@ -73,52 +90,68 @@ func (d *Deploy) Complete(args []string) error {
 
 // Validate asserts the requirements to start the deployment are in place.
 func (d *Deploy) Validate() error {
-	return k8s.EnsureOpenShiftProject(
-		d.cmd.Context(),
-		d.log(),
-		d.kube,
-		d.cfg.Installer.Namespace,
-	)
+	if d.topologyBuilder == nil {
+		panic("topology is nil")
+	}
+	return nil
 }
 
 // Run deploys the enabled dependencies listed on the configuration.
 func (d *Deploy) Run() error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	cfs, err := chartfs.NewChartFS(cwd)
-	if err != nil {
-		return err
-	}
+	printer.Disclaimer()
 
 	d.log().Debug("Reading values template file")
-	valuesTmpl, err := cfs.ReadFile(d.valuesTemplatePath)
+	valuesTmpl, err := d.cfs.ReadFile(d.valuesTemplatePath)
 	if err != nil {
-		return fmt.Errorf("failed to read values template file: %w", err)
+		return err
 	}
 
-	d.log().Debug("Installing dependencies...")
-	var deps []config.Dependency
+	topology, err := d.topologyBuilder.Build(d.cmd.Context(), d.cfg)
+	if err != nil {
+		if errors.Is(err, resolver.ErrMissingIntegrations) {
+			return fmt.Errorf(`%s
+
+Required integrations are missing from the cluster, run the "%s integration"
+subcommand to configure them. For example:
+
+	$ %s integration --help
+	$ %s integration <name> --help
+	`,
+				err, constants.AppName, constants.AppName, constants.AppName)
+
+		}
+		return err
+	}
+
+	var deps resolver.Dependencies
 	if d.chartPath == "" {
-		// Installing each Helm Chart dependency from the configuration, only
-		// selecting the Helm Charts that are enabled.
-		deps = d.cfg.GetEnabledDependencies(d.log())
+		d.log().Debug("Installing all dependencies...")
+		deps = topology.Dependencies()
 	} else {
-		// Installing a single Chart dependency
-		dep, err := d.cfg.GetDependency(d.log(), d.chartPath)
+		d.log().Debug("Installing a single Helm chart...")
+		hc, err := d.cfs.GetChartFiles(d.chartPath)
+		if err != nil {
+			return err
+		}
+		dep, err := topology.GetDependency(hc.Name())
 		if err != nil {
 			return err
 		}
 		deps = append(deps, *dep)
 	}
-	for ix, dep := range deps {
-		fmt.Printf("\n\n############################################################\n")
-		fmt.Printf("# [%d/%d] Deploying '%s' in '%s'.\n", ix+1, len(deps), dep.Chart, dep.Namespace)
-		fmt.Printf("############################################################\n")
 
-		i := installer.NewInstaller(d.log(), d.flags, d.kube, cfs, &dep)
+	for index, dep := range deps {
+		fmt.Printf("\n\n%s\n", strings.Repeat("#", 60))
+		fmt.Printf(
+			"# [%d/%d] Deploying '%s' in '%s'.\n",
+			index+1,
+			len(deps),
+			dep.Name(),
+			dep.Namespace(),
+		)
+		fmt.Printf("%s\n", strings.Repeat("#", 60))
+
+		i := installer.NewInstaller(d.log(), d.flags, d.kube, &dep)
 
 		err := i.SetValues(d.cmd.Context(), &d.cfg.Installer, string(valuesTmpl))
 		if err != nil {
@@ -135,15 +168,18 @@ func (d *Deploy) Run() error {
 			i.PrintValues()
 		}
 
-		err = i.Install(d.cmd.Context())
-		// Delete temporary resources
-		if err := k8s.RetryDeleteResources(d.cmd.Context(), d.kube, d.cfg.Installer.Namespace); err != nil {
-			d.log().Debug(err.Error())
-		}
-		if err != nil {
+		if err = i.Install(d.cmd.Context()); err != nil {
 			return err
 		}
-		fmt.Printf("############################################################\n\n")
+		// Cleaning up temporary resources.
+		if err = k8s.RetryDeleteResources(
+			d.cmd.Context(),
+			d.kube,
+			d.cfg.Installer.Namespace,
+		); err != nil {
+			d.log().Debug(err.Error())
+		}
+		fmt.Printf("%s\n", strings.Repeat("#", 60))
 	}
 
 	fmt.Printf("Deployment complete!\n")

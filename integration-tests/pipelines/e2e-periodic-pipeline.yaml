@@ -1,0 +1,96 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: e2e-periodic-pipeline
+  namespace: rhtap-shared-team-tenant
+  labels:
+    appstudio.openshift.io/component: tssc-cli
+    appstudio.openshift.io/application: tssc-cli
+spec:
+  description: |-
+    Pipeline for periodic testing with multiple configurations generated from PICT file.
+    This pipeline processes PICT combinations and creates multiple test configurations.
+  params:
+    - name: SNAPSHOT
+      description: "The JSON string representing the snapshot of the application under test."
+      default: '{"components": [{"name":"test-app", "containerImage": "quay.io/example/repo:latest"}]}'
+      type: string
+    - name: konflux-test-infra-secret
+      description: The name of secret where testing infrastructures credentials are stored.
+      type: string
+    - name: cloud-credential-key
+      description: The key secret from konflux-test-infra-secret where all AWS ROSA configurations are stored.
+      type: string
+    - name: ocp-instance-type
+      description: 'The type of machine to use for the cluster nodes.'
+      default: "m5.2xlarge"
+      type: string
+    - name: ocp-replicas
+      description: 'The number of replicas for the cluster nodes.'
+      default: "3"
+      type: string
+
+  tasks:
+    - name: test-metadata
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/konflux-ci/konflux-qe-definitions.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: common/tasks/test-metadata/0.2/test-metadata.yaml
+      params:
+        - name: SNAPSHOT
+          value: $(params.SNAPSHOT)
+        - name: test-name
+          value: $(context.pipelineRun.name)
+    - name: process-periodic-configs
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/redhat-appstudio/tssc-cli.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: integration-tests/tasks/process-periodic-configs.yaml
+      params:
+        - name: job-spec
+          value: $(tasks.test-metadata.results.job-spec)
+      runAfter:
+        - test-metadata
+    - name: start-periodic-pipelines
+      runAfter:
+        - test-metadata
+        - process-periodic-configs
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/redhat-appstudio/tssc-cli.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: integration-tests/tasks/start-pipelines.yaml
+      params:
+        - name: snapshot
+          value: $(params.SNAPSHOT)
+        - name: job-spec
+          value: $(tasks.test-metadata.results.job-spec)
+        - name: rhads-config
+          value: $(tasks.process-periodic-configs.results.rhads-config)
+        - name: mode
+          value: "periodic"
+        - name: konflux-test-infra-secret
+          value: $(params.konflux-test-infra-secret)
+        - name: cloud-credential-key
+          value: $(params.cloud-credential-key)
+        - name: ocp-instance-type
+          value: $(params.ocp-instance-type)
+        - name: ocp-replicas
+          value: $(params.ocp-replicas)
+        - name: context-pipeline-run-name
+          value: $(context.pipelineRun.name)

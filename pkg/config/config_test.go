@@ -1,10 +1,9 @@
 package config
 
 import (
-	"log/slog"
 	"testing"
 
-	"github.com/redhat-appstudio/rhtap-cli/pkg/chartfs"
+	"github.com/redhat-appstudio/tssc-cli/pkg/chartfs"
 
 	o "github.com/onsi/gomega"
 )
@@ -25,17 +24,17 @@ func TestNewConfigFromFile(t *testing.T) {
 		g.Expect(err).To(o.Succeed())
 	})
 
-	t.Run("GetEnabledDependencies", func(t *testing.T) {
-		deps := cfg.GetEnabledDependencies(slog.Default())
-		g.Expect(deps).NotTo(o.BeEmpty())
-		g.Expect(len(deps)).To(o.BeNumerically(">=", 1))
+	t.Run("GetEnabledProducts", func(t *testing.T) {
+		products := cfg.GetEnabledProducts()
+		g.Expect(products).NotTo(o.BeEmpty())
+		g.Expect(len(products)).To(o.BeNumerically(">", 1))
 	})
 
 	t.Run("GetProduct", func(t *testing.T) {
 		_, err := cfg.GetProduct("product1")
 		g.Expect(err).NotTo(o.Succeed())
 
-		product, err := cfg.GetProduct(DeveloperHub)
+		product, err := cfg.GetProduct("Developer Hub")
 		g.Expect(err).To(o.Succeed())
 		g.Expect(product).NotTo(o.BeNil())
 		g.Expect(product.GetNamespace()).NotTo(o.BeEmpty())
@@ -46,12 +45,25 @@ func TestNewConfigFromFile(t *testing.T) {
 		g.Expect(err).To(o.Succeed())
 		g.Expect(string(payload)).To(o.ContainSubstring("tssc:"))
 
-		err = cfg.UnmarshalYAML()
+		err = cfg.UnmarshalYAML(payload)
 		g.Expect(err).To(o.Succeed())
 	})
 
+	t.Run("DecodeNode", func(t *testing.T) {
+		err := cfg.DecodeNode()
+		g.Expect(err).To(o.Succeed())
+		g.Expect(cfg.Installer).NotTo(o.BeNil())
+	})
+
 	t.Run("String", func(t *testing.T) {
-		payload := cfg.String()
-		g.Expect(string(payload)).To(o.ContainSubstring("tssc:"))
+		original, err := cfs.ReadFile("config.yaml")
+		g.Expect(err).To(o.Succeed())
+
+		configString := cfg.String()
+		g.Expect(err).To(o.Succeed())
+		g.Expect(string(configString)).To(o.ContainSubstring("tssc:"))
+
+		// Asserting the original configuration looks like the marshaled one.
+		g.Expect(string(original)).To(o.Equal(configString))
 	})
 }

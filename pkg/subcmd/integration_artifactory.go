@@ -3,9 +3,9 @@ package subcmd
 import (
 	"log/slog"
 
-	"github.com/redhat-appstudio/rhtap-cli/pkg/config"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/integrations"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/k8s"
+	"github.com/redhat-appstudio/tssc-cli/pkg/config"
+	"github.com/redhat-appstudio/tssc-cli/pkg/integration"
+	"github.com/redhat-appstudio/tssc-cli/pkg/k8s"
 
 	"github.com/spf13/cobra"
 )
@@ -13,12 +13,11 @@ import (
 // IntegrationArtifactory is the sub-command for the "integration artifactory",
 // responsible for creating and updating the Artifactory integration secret.
 type IntegrationArtifactory struct {
-	cmd    *cobra.Command // cobra command
-	logger *slog.Logger   // application logger
-	cfg    *config.Config // installer configuration
-	kube   *k8s.Kube      // kubernetes client
-
-	artifactoryIntegration *integrations.ArtifactoryIntegration // artifactory integration
+	cmd         *cobra.Command           // cobra command
+	logger      *slog.Logger             // application logger
+	cfg         *config.Config           // installer configuration
+	kube        *k8s.Kube                // kubernetes client
+	integration *integration.Integration // integration instance
 
 	apiToken         string // web API token
 	dockerconfigjson string // credentials to push/pull from the registry
@@ -35,29 +34,25 @@ for RHDH.
 `
 
 // Cmd exposes the cobra instance.
-func (d *IntegrationArtifactory) Cmd() *cobra.Command {
-	return d.cmd
+func (a *IntegrationArtifactory) Cmd() *cobra.Command {
+	return a.cmd
 }
 
 // Complete is a no-op in this case.
-func (d *IntegrationArtifactory) Complete(args []string) error {
+func (a *IntegrationArtifactory) Complete(args []string) error {
 	var err error
-	d.cfg, err = bootstrapConfig(d.cmd.Context(), d.kube)
+	a.cfg, err = bootstrapConfig(a.cmd.Context(), a.kube)
 	return err
 }
 
 // Validate checks if the required configuration is set.
-func (d *IntegrationArtifactory) Validate() error {
-	return d.artifactoryIntegration.Validate()
+func (a *IntegrationArtifactory) Validate() error {
+	return a.integration.Validate()
 }
 
 // Run creates or updates the Artifactory integration secret.
-func (d *IntegrationArtifactory) Run() error {
-	err := d.artifactoryIntegration.EnsureNamespace(d.cmd.Context(), d.cfg)
-	if err != nil {
-		return err
-	}
-	return d.artifactoryIntegration.Create(d.cmd.Context(), d.cfg)
+func (a *IntegrationArtifactory) Run() error {
+	return a.integration.Create(a.cmd.Context(), a.cfg)
 }
 
 // NewIntegrationArtifactory creates the sub-command for the "integration artifactory"
@@ -65,10 +60,9 @@ func (d *IntegrationArtifactory) Run() error {
 func NewIntegrationArtifactory(
 	logger *slog.Logger,
 	kube *k8s.Kube,
+	i *integration.Integration,
 ) *IntegrationArtifactory {
-	artifactoryIntegration := integrations.NewArtifactoryIntegration(logger, kube)
-
-	d := &IntegrationArtifactory{
+	a := &IntegrationArtifactory{
 		cmd: &cobra.Command{
 			Use:          "artifactory [flags]",
 			Short:        "Integrates a Artifactory instance into TSSC",
@@ -76,13 +70,10 @@ func NewIntegrationArtifactory(
 			SilenceUsage: true,
 		},
 
-		logger: logger,
-		kube:   kube,
-
-		artifactoryIntegration: artifactoryIntegration,
+		logger:      logger,
+		kube:        kube,
+		integration: i,
 	}
-
-	p := d.cmd.PersistentFlags()
-	artifactoryIntegration.PersistentFlags(p)
-	return d
+	i.PersistentFlags(a.cmd)
+	return a
 }

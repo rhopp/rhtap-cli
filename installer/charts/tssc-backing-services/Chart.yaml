@@ -1,6 +1,0 @@
----
-apiVersion: v2
-name: tssc-backing-services
-description: TSSC Backing Services
-type: application
-version: "1.6.0"

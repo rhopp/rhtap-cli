@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/redhat-appstudio/rhtap-cli/pkg/chartfs"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/config"
+	"github.com/redhat-appstudio/tssc-cli/pkg/chartfs"
+	"github.com/redhat-appstudio/tssc-cli/pkg/resolver"
 
 	o "github.com/onsi/gomega"
 )
@@ -17,12 +17,12 @@ func TestNewHooks(t *testing.T) {
 	var stderr bytes.Buffer
 	cfs, err := chartfs.NewChartFS("../../test")
 	g.Expect(err).To(o.Succeed())
+
+	chart, err := cfs.GetChartFiles("charts/testing")
+	g.Expect(err).To(o.Succeed())
+
 	h := NewHooks(
-		cfs,
-		&config.Dependency{
-			Chart:     "charts/testing",
-			Namespace: "tssc",
-		},
+		resolver.NewDependencyWithNamespace(chart, "tssc"),
 		&stdout,
 		&stderr,
 	)

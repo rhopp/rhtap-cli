@@ -1,12 +1,12 @@
 <p align="center">
-    <a alt="Project quality report" href="https://goreportcard.com/report/github.com/redhat-appstudio/rhtap-cli">
-        <img src="https://goreportcard.com/badge/github.com/redhat-appstudio/rhtap-cli">
+    <a alt="Project quality report" href="https://goreportcard.com/report/github.com/redhat-appstudio/tssc-cli">
+        <img src="https://goreportcard.com/badge/github.com/redhat-appstudio/tssc-cli">
     </a>
-    <a alt="Release workflow status" href="https://github.com/redhat-appstudio/rhtap-cli/actions">
-        <img src="https://github.com/redhat-appstudio/rhtap-cli/actions/workflows/release.yaml/badge.svg">
+    <a alt="Release workflow status" href="https://github.com/redhat-appstudio/tssc-cli/actions">
+        <img src="https://github.com/redhat-appstudio/tssc-cli/actions/workflows/release.yaml/badge.svg">
     </a>
-    <a alt="Latest project release" href="https://github.com/redhat-appstudio/rhtap-cli/releases/latest">
-        <img src="https://img.shields.io/github/v/release/redhat-appstudio/rhtap-cli">
+    <a alt="Latest project release" href="https://github.com/redhat-appstudio/tssc-cli/releases/latest">
+        <img src="https://img.shields.io/github/v/release/redhat-appstudio/tssc-cli">
     </a>
 </p>
 
@@ -46,12 +46,22 @@ tssc config --create --get
 ```bash
 tssc integration --help
 ```
+
+4. Optionally, inspect the dependency topology before deploying TSSC by running:
+
+```bash
+tssc topology
+```
   
-4. Finally, run the below command to proceed with TSSC deployment. 
+5. Finally, run the below command to proceed with TSSC deployment. 
 
 ```bash
 tssc deploy
 ```
+
+## Model Context Protocol Server (MCP)
+
+The TSSC features are also available via the Model Context Protocol server (MCP), please consider the [MCP documentation](docs/mcp.md) for more details.
 
 # Configuration
 
@@ -63,7 +73,6 @@ tssc:
   namespace: tssc
   settings: {}
   products: {}
-  dependencies: {}
 ```
 
 The attributes of the `tssc` object are as follows:
@@ -71,7 +80,6 @@ The attributes of the `tssc` object are as follows:
 - `.namespace`: Specifies the default namespace used by the installer, set to `tssc`. This namespace acts as the primary operational area for the installation process.
 - `.settings`: Defines the settings of the deployment. This can control a wide set of properties.
 - `.products`: Defines the features to be deployed by the installer. Each feature is identified by a unique name and a set of properties.
-- `.dependencies`: Specifies the dependencies rolled out by the installer in the specific order defined in the configuration file.
 
 ## `tssc.settings`
 
@@ -106,18 +114,6 @@ With the following attributes:
 
 This data can be leveraged for templating using the [`values.yaml.tpl`](#template-functions) file.
 
-## `tssc.dependencies`
-
-Each dependency is defined by a unique name and a set of attributes. The installer will deploy these dependencies in the order specified in the configuration file. For instance:
-
-```yaml
-tssc:
-  dependencies:
-    - chart: path/to/chart/directory 
-      namespace: namespace
-      enabled: true
-```
-
 ### Hook Scripts
 
 The installer supports hook scripts to execute custom logic before and after the installation of a Helm Chart. The hook scripts are stored in the `hooks` directory and are executed in the following order:
@@ -139,6 +135,8 @@ This is currently mainly a placeholder for future configuration settings that wo
 
 ### `{{ .Installer.Products.* }}`
 
+The product name, `.name` attribute, is sanitized to work as a template variable. For example, if the product name is `Developer Hub` it will be converted to `Developer_Hub`.
+
 - `{{ .Installer.Products.*.Enabled }}`: Returns the boolean value of the product's `enabled` field.
 - `{{ .Installer.Products.*.Namespace }}`: Returns the namespace in which the product will be deployed.
 - `{{ .Installer.Products.*.Properties.*}}`: Returns a dictionary of key-value pairs for the product's properties.
@@ -154,6 +152,10 @@ developerHub:
   ingressDomain: {{ $ingressDomain }}
 ```
 
+# Dependency Topology
+
+The dependency order and namespace is based on the products enabled in the cluster configuration, please consider the [topology](docs/topology.md) document for more details.
+
 # Installing `tssc`
 
 ## Pre-Compiled Binaries
@@ -168,14 +170,14 @@ install --mode=755 bin/tssc /usr/local/bin
 
 Please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) for more information on building the project from source requirements. Then, follow the steps below to install the `tssc` binary from source:
 
-1. Clone [the repository][https://github.com/redhat-appstudio/rhtap-cli.git], and navigate to the `rhtap-cli` directory.
+1. Clone [the repository](https://github.com/redhat-appstudio/tssc-cli.git), and navigate to the `tssc-cli` directory.
 
 ```bash
-git clone --depth=1 https://github.com/redhat-appstudio/rhtap-cli.git && \
-  cd rhtap-cli
+git clone --depth=1 https://github.com/redhat-appstudio/tssc-cli.git && \
+  cd tssc-cli
 ```
 
-2. Run the command `make` from the `rhtap-cli` directory, this will create a `bin` folder
+2. Run the command `make` from the `tssc-cli` directory, this will create a `bin` folder
 
 ```bash
 make
@@ -192,5 +194,5 @@ install --mode=755 bin/tssc /usr/local/bin
 Please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for more information on contributing to this project.
  
 [helm]: https://helm.sh/
-[releases]: https://github.com/redhat-appstudio/rhtap-cli/releases
-[rhtapCLI]: https://github.com/redhat-appstudio/rhtap-cli
+[releases]: https://github.com/redhat-appstudio/tssc-cli/releases
+[tsscCLI]: https://github.com/redhat-appstudio/tssc-cli

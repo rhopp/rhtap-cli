@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/redhat-appstudio/rhtap-cli/pkg/chartfs"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/config"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/flags"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/k8s"
+	"github.com/redhat-appstudio/tssc-cli/pkg/chartfs"
+	"github.com/redhat-appstudio/tssc-cli/pkg/config"
+	"github.com/redhat-appstudio/tssc-cli/pkg/flags"
+	"github.com/redhat-appstudio/tssc-cli/pkg/k8s"
+	"github.com/redhat-appstudio/tssc-cli/pkg/printer"
+	"github.com/redhat-appstudio/tssc-cli/pkg/resolver"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -33,7 +35,12 @@ type Config struct {
 var _ Interface = &Config{}
 
 const configDesc = `
-Manages installer's cluster configuration. Before "tssc deploy", you need to
+Manages installer's cluster configuration.
+
+It should only be used to for experimental deployments. Production
+deployments are not supported.
+
+Before "tssc deploy", you need to
 create a cluster configuration, responsible to define all installation settings
 for the whole Kubernetes cluster.
 
@@ -97,7 +104,7 @@ func (c *Config) validateFlags() error {
 		return fmt.Errorf("cannot get and delete at the same time")
 	}
 	if !c.create && !c.force && !c.get && !c.delete {
-		return fmt.Errorf("either apply, update, get or delete must be set")
+		return fmt.Errorf("either create, get or delete must be set")
 	}
 	return nil
 }
@@ -140,9 +147,27 @@ func (c *Config) Validate() error {
 // runCreate runs create action, makes sure a new configuration is applied in the
 // cluster and update when using the --force flag.
 func (c *Config) runCreate() error {
+	printer.Disclaimer()
+
 	c.log().Debug("Loading configuration from file")
 	cfg, err := config.NewConfigFromFile(c.cfs, c.configPath)
 	if err != nil {
+		return err
+	}
+
+	// Ensuring the configuration is compabile with the Helm charts available for
+	// the installer, product associated charts and dependencies are verified.
+	c.log().Debug("Verifying installer Helm charts")
+	charts, err := c.cfs.GetAllCharts()
+	if err != nil {
+		return err
+	}
+	collection, err := resolver.NewCollection(charts)
+	if err != nil {
+		return err
+	}
+	r := resolver.NewResolver(cfg, collection, resolver.NewTopology())
+	if err = r.Resolve(); err != nil {
 		return err
 	}
 
@@ -154,6 +179,9 @@ func (c *Config) runCreate() error {
 			config.Name,
 			fmt.Sprintf("%s=true", config.Label),
 		)
+		if err != nil {
+			return err
+		}
 		fmt.Print(cfg.String())
 		return nil
 	}

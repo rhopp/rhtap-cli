@@ -3,9 +3,9 @@ package subcmd
 import (
 	"log/slog"
 
-	"github.com/redhat-appstudio/rhtap-cli/pkg/config"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/integrations"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/k8s"
+	"github.com/redhat-appstudio/tssc-cli/pkg/config"
+	"github.com/redhat-appstudio/tssc-cli/pkg/integration"
+	"github.com/redhat-appstudio/tssc-cli/pkg/k8s"
 
 	"github.com/spf13/cobra"
 )
@@ -13,14 +13,11 @@ import (
 // IntegrationNexus is the sub-command for the "integration nexus",
 // responsible for creating and updating the Nexus integration secret.
 type IntegrationNexus struct {
-	cmd    *cobra.Command // cobra command
-	logger *slog.Logger   // application logger
-	cfg    *config.Config // installer configuration
-	kube   *k8s.Kube      // kubernetes client
-
-	nexusIntegration *integrations.NexusIntegration // nexus integration
-
-	dockerconfigjson string // credentials to push/pull from the registry
+	cmd         *cobra.Command           // cobra command
+	logger      *slog.Logger             // application logger
+	cfg         *config.Config           // installer configuration
+	kube        *k8s.Kube                // kubernetes client
+	integration *integration.Integration // integration instance
 }
 
 var _ Interface = &IntegrationNexus{}
@@ -34,29 +31,25 @@ for RHDH.
 `
 
 // Cmd exposes the cobra instance.
-func (d *IntegrationNexus) Cmd() *cobra.Command {
-	return d.cmd
+func (n *IntegrationNexus) Cmd() *cobra.Command {
+	return n.cmd
 }
 
 // Complete is a no-op in this case.
-func (d *IntegrationNexus) Complete(args []string) error {
+func (n *IntegrationNexus) Complete(args []string) error {
 	var err error
-	d.cfg, err = bootstrapConfig(d.cmd.Context(), d.kube)
+	n.cfg, err = bootstrapConfig(n.cmd.Context(), n.kube)
 	return err
 }
 
 // Validate checks if the required configuration is set.
-func (d *IntegrationNexus) Validate() error {
-	return d.nexusIntegration.Validate()
+func (n *IntegrationNexus) Validate() error {
+	return n.integration.Validate()
 }
 
 // Run creates or updates the Nexus integration secret.
-func (d *IntegrationNexus) Run() error {
-	err := d.nexusIntegration.EnsureNamespace(d.cmd.Context(), d.cfg)
-	if err != nil {
-		return err
-	}
-	return d.nexusIntegration.Create(d.cmd.Context(), d.cfg)
+func (n *IntegrationNexus) Run() error {
+	return n.integration.Create(n.cmd.Context(), n.cfg)
 }
 
 // NewIntegrationNexus creates the sub-command for the "integration nexus"
@@ -64,10 +57,9 @@ func (d *IntegrationNexus) Run() error {
 func NewIntegrationNexus(
 	logger *slog.Logger,
 	kube *k8s.Kube,
+	i *integration.Integration,
 ) *IntegrationNexus {
-	nexusIntegration := integrations.NewNexusIntegration(logger, kube)
-
-	d := &IntegrationNexus{
+	n := &IntegrationNexus{
 		cmd: &cobra.Command{
 			Use:          "nexus [flags]",
 			Short:        "Integrates a Nexus instance into TSSC",
@@ -75,13 +67,10 @@ func NewIntegrationNexus(
 			SilenceUsage: true,
 		},
 
-		logger: logger,
-		kube:   kube,
-
-		nexusIntegration: nexusIntegration,
+		logger:      logger,
+		kube:        kube,
+		integration: i,
 	}
-
-	p := d.cmd.PersistentFlags()
-	nexusIntegration.PersistentFlags(p)
-	return d
+	i.PersistentFlags(n.cmd)
+	return n
 }

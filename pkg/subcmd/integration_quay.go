@@ -3,9 +3,9 @@ package subcmd
 import (
 	"log/slog"
 
-	"github.com/redhat-appstudio/rhtap-cli/pkg/config"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/integrations"
-	"github.com/redhat-appstudio/rhtap-cli/pkg/k8s"
+	"github.com/redhat-appstudio/tssc-cli/pkg/config"
+	"github.com/redhat-appstudio/tssc-cli/pkg/integration"
+	"github.com/redhat-appstudio/tssc-cli/pkg/k8s"
 
 	"github.com/spf13/cobra"
 )
@@ -13,16 +13,11 @@ import (
 // IntegrationQuay is the sub-command for the "integration quay",
 // responsible for creating and updating the Quay integration secret.
 type IntegrationQuay struct {
-	cmd    *cobra.Command // cobra command
-	logger *slog.Logger   // application logger
-	cfg    *config.Config // installer configuration
-	kube   *k8s.Kube      // kubernetes client
-
-	quayIntegration *integrations.QuayIntegration // quay integration
-
-	apiToken                 string // web API token
-	dockerconfigjson         string // credentials to push/pull from the registry
-	dockerconfigjsonreadonly string // credentials to read from the registry
+	cmd         *cobra.Command           // cobra command
+	logger      *slog.Logger             // application logger
+	cfg         *config.Config           // installer configuration
+	kube        *k8s.Kube                // kubernetes client
+	integration *integration.Integration // integration instance
 }
 
 var _ Interface = &IntegrationQuay{}
@@ -34,46 +29,49 @@ credentials required by the TSSC services to interact with Quay.
 The credentials are stored in a Kubernetes Secret in the configured namespace
 for RHDH.
 
+If you experience push issues, add the image repository path in the
+"dockerconfig.json". For example, instead of "quay.io", specify the full
+repository path "quay.io/my-repository", as shown below:
 
-If you experience push issues, add the image repository path in the "dockerconfig.json". For example, instead of "quay.io", specify the full repository path "quay.io/my-repository", as shown below:
+  $ tssc integration quay \
+	  --dockerconfigjson '{ "auths": { "quay.io/my-repository": { "auth": "REDACTED" } } }' \
+	  --token "REDACTED" \
+	  --url 'https://quay.io'
 
-/bin/tssc integration quay --kube-config ~/my/kube/config --dockerconfigjson '{ "auths": { "quay.io/my-repository": { "auth": "REDACTED", "email": "" }  } }' --token "REDACTED" --url 'https://quay.io'
-
-The given API token (--token) must have push/pull permissions on the target repository.
+The given API token (--token) must have push/pull permissions on the target
+repository.
 `
 
 // Cmd exposes the cobra instance.
-func (d *IntegrationQuay) Cmd() *cobra.Command {
-	return d.cmd
+func (q *IntegrationQuay) Cmd() *cobra.Command {
+	return q.cmd
 }
 
 // Complete is a no-op in this case.
-func (d *IntegrationQuay) Complete(args []string) error {
+func (q *IntegrationQuay) Complete(args []string) error {
 	var err error
-	d.cfg, err = bootstrapConfig(d.cmd.Context(), d.kube)
+	q.cfg, err = bootstrapConfig(q.cmd.Context(), q.kube)
 	return err
 }
 
 // Validate checks if the required configuration is set.
-func (d *IntegrationQuay) Validate() error {
-	return d.quayIntegration.Validate()
+func (q *IntegrationQuay) Validate() error {
+	return q.integration.Validate()
 }
 
 // Run creates or updates the Quay integration secret.
-func (d *IntegrationQuay) Run() error {
-	err := d.quayIntegration.EnsureNamespace(d.cmd.Context(), d.cfg)
-	if err != nil {
-		return err
-	}
-	return d.quayIntegration.Create(d.cmd.Context(), d.cfg)
+func (q *IntegrationQuay) Run() error {
+	return q.integration.Create(q.cmd.Context(), q.cfg)
 }
 
 // NewIntegrationQuay creates the sub-command for the "integration quay"
 // responsible to manage the TSSC integrations with a Quay image registry.
-func NewIntegrationQuay(logger *slog.Logger, kube *k8s.Kube) *IntegrationQuay {
-	quayIntegration := integrations.NewQuayIntegration(logger, kube)
-
-	d := &IntegrationQuay{
+func NewIntegrationQuay(
+	logger *slog.Logger,
+	kube *k8s.Kube,
+	i *integration.Integration,
+) *IntegrationQuay {
+	q := &IntegrationQuay{
 		cmd: &cobra.Command{
 			Use:          "quay [flags]",
 			Short:        "Integrates a Quay instance into TSSC",
@@ -81,13 +79,10 @@ func NewIntegrationQuay(logger *slog.Logger, kube *k8s.Kube) *IntegrationQuay {
 			SilenceUsage: true,
 		},
 
-		logger: logger,
-		kube:   kube,
-
-		quayIntegration: quayIntegration,
+		logger:      logger,
+		kube:        kube,
+		integration: i,
 	}
-
-	p := d.cmd.PersistentFlags()
-	quayIntegration.PersistentFlags(p)
-	return d
+	i.PersistentFlags(q.cmd)
+	return q
 }
