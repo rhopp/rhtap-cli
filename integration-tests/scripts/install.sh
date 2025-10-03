@@ -255,13 +255,48 @@ nexus_integration() {
   fi
 }
 
-create_cluster_config() {
-  echo "[INFO] Creating the installer's cluster configuration"
-  update_dh_catalog_url
-  update_dh_auth_config
-  disable_acs
-  disable_tpa
-  
+wait_for() {
+    local command="${1}"
+    local description="${2}"
+    local timeout="${3}"
+    local interval="${4}"
+    printf "Waiting for %s for %s...\n" "${description}" "${timeout}"
+    timeout --foreground "${timeout}" bash -c "
+    set -x
+    until ${command}
+    do
+        printf \"Waiting for %s... Trying again in ${interval}s\n\" \"${description}\"
+        sleep ${interval}
+    done
+    set +x
+    " || return 1
+    printf "%s finished!\n" "${description}"
+}
+
+updateCert() {
+  set -x
+  kubectl create configmap root-ca -n openshift-config --from-literal=ca-bundle.crt="$(kubectl get configmap "kube-root-ca.crt" -o=json |jq -r '.data["ca.crt"]')"
+  BASE_DOMAIN=$(oc get ingress.config.openshift.io cluster -o jsonpath='{.spec.domain}')
+  REGISTRY_URL="rhtap-quay-quay-rhtap-quay.$BASE_DOMAIN"
+  # REGISTRY=$(oc get routes/rhtap-quay-quay -n rhtap-quay -o jsonpath="{.spec.host}")
+  kubectl create configmap root-ca-image -n openshift-config --from-literal="$REGISTRY_URL"="$(kubectl get configmap "kube-root-ca.crt" -o=json |jq -r '.data["ca.crt"]')"
+  kubectl get cm root-ca -n openshift-config
+  oc patch proxy/cluster --type=merge --patch='{"spec":{"trustedCA":{"name":"root-ca"}}}'
+  oc patch image.config/cluster --type=merge --patch='{"spec":{"additionalTrustedCA":{"name":"root-ca-image"}}}'
+
+  sleep 5
+  oc get co
+  wait_for "kubectl get clusteroperators -A" "cluster operators to be accessible" "10m" "30"
+  echo "[INFO] Cluster operators were updated."
+  set +x
+}
+
+install_tssc() {
+  echo "[INFO] Start installing TSSC"
+
+  echo "[INFO] Installing TSSC"
+
+  echo "[INFO] Showing the local configuration"
   set -x
   cat "$config_file"
   set +x
@@ -306,6 +341,8 @@ install_tssc() {
   echo "[INFO] Print out the integration secrets in 'tssc' namespace"
   kubectl -n tssc get secret 
 }
+
+updateCert
 
 ci_enabled
 create_cluster_config
